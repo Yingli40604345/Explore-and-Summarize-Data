@@ -1,0 +1,748 @@
+
+<style>
+body {
+text-align: justify}
+</style>
+Financial Contributions to Presidential Campaigns Exploration of Virginia by Ying Li
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results="hide",packages}
+library(gender)
+library(zipcode)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+lct <-Sys.getlocale("LC_TIME"); Sys.setlocale("LC_TIME", "C")
+
+```
+
+```{r echo=FALSE, message=FALSE, Load_the_Data}
+# Load the Data
+
+
+va=read.csv('C:/Users/Ying Li/Desktop/P4/P00000001-VA.csv',row.names = NULL, stringsAsFactors = F)
+#move column names one column left 
+colnames(va)=colnames(va)[-1]
+#Remove the last NA column
+va <- va[,1:18]
+
+```
+
+>**In this report, I'm going to explore the financial contributions to presidential of Virginia in 2016. I'll use the data from the Federal Election Commission website. I'd like to find out how financial contribution amound varies among different parties, different locations and different candidates.**
+
+# Univariate Plots Section
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, Univariate_Plots}
+
+#predict gender
+#https://cran.r-project.org/web/packages/gender/gender.pdf
+va$contbr_fn <- sub(".*, ", "", va$contbr_nm)
+va$contbr_fn <-sub(" .*", "", va$contbr_fn)
+gd=gender(va$contbr_fn, method = "ssa", countries = "United States")
+va$gender<- gd$gender[match(va$contbr_fn, gd$name)]
+
+#party
+uniq_cand=unique(va$cand_nm)
+republican<- c("Trump, Donald J.","Santorum, Richard J." ,"Cruz, Rafael Edward 'Ted'",
+               "Walker, Scott","Bush, Jeb","Rubio, Marco","Kasich, John R.",
+               "Christie, Christopher J.","Gilmore, James S III","Carson, Benjamin S.","Paul, Rand",
+               "Fiorina, Carly","Jindal, Bobby","Huckabee, Mike","Graham, Lindsey O.","Pataki, George E.",
+               "Perry, James R. (Rick)")
+democratic<-c("Clinton, Hillary Rodham","Sanders, Bernard","O'Malley, Martin Joseph" ,"Webb, James Henry Jr.",
+              "Lessig, Lawrence" )
+third_and_inde<-c("Johnson, Gary","Stein, Jill","McMullin, Evan" )
+va$party<-NA
+va$party[va$cand_nm %in%  republican]<-'Republican Party'
+va$party[va$cand_nm %in%  democratic]<-'Democratic Party'
+va$party[va$cand_nm %in%  third_and_inde]<-'Third party or Independent Candidates'
+
+
+
+
+
+
+#date
+va$date <- as.Date(va$contb_receipt_dt, format = "%d-%b-%y")
+
+
+str(va)
+```
+>**As we can see, After adjust my dataset, now there're 24 variables and  212849 observations. I will focus on the variables like gender, party, latitude, longitude, date and contbr_name of the dataset. **
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+options(scipen=100000)
+grid.arrange( ggplot(aes(x=contb_receipt_amt), 
+        data = va) + scale_y_log10()+
+  geom_histogram( bins = 30)+
+  ggtitle("Contribution Amount Distribution") +
+  xlab('contribution amount'),
+   ggplot(aes(x=1, y=contb_receipt_amt), 
+        data =va) +
+  geom_boxplot( )+ scale_y_log10()+
+  ggtitle("Contribution Amount Distribution") +
+  ylab('contribution amount'), nrow =1)
+summary(va$contb_receipt_amt)
+
+```
+
+>**As we can see from the figure above, Most of the contributions are below $500. There are a few contributions around $1000 and $2700. This quite surprises me. In the past, I thought the countributions are from rich people to the politicians they support, which should be a large amount of money. After some search, I find out that the contributions should not even exceed $2700 or there will be a refund. In order to check the outliers better and see it more clear, I also use boxplot. The boxplot is much more clear. There're many outliers. As we can see, the minimum contribution amount is -8100 and the max contribution amount is 10800.  Since any contribution above $2700 will be refund as a negative contribution receipt amount, I'll remove there outliers, which are value higher than $2700 or lower than $0. **
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+va <- va[va$contb_receipt_amt > 0 & va$contb_receipt_amt <= 2700, ]
+```
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, fig.width=10}
+ggplot(aes(x='',y=contb_receipt_amt), 
+        data = va) +
+  geom_violin()+
+  ggtitle("Contribution Amount Distribution") +
+  ylab('contribution amount')+
+  xlab('count')
+summary(va$contb_receipt_amt)
+```
+
+>**Now we can see from the summary that since we've already removed the outliers, the min contribution amount is $0.05 and the max contribution amount is $2700.**
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, fig.width=10}
+qplot(gender,data=subset(va, !is.na(gender)), color=I('black'),fill=gender)+
+  ggtitle("Contribution Count by Gender") 
+table(va$gender)
+```
+
+>**We can see from the summary that the the number of female contributors and male contributors are quite similar, and the number of female contributor is a little bit higher than male contributor. The figure of Contribution Count by Gender shows how the contribution activity varies among sex. From the figure above, we can see that regardless of the amount of money, Female contributers contribute more times compared with male contributers. **
+
+```{r echo=FALSE,echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+grid.arrange( ggplot(aes(x=as.numeric(contbr_zip)), 
+        data = va) +
+  geom_histogram( bins = 30)+
+  xlab('Numerical zipcode')+
+  ggtitle("zipcode Histogram Distribution") ,
+   ggplot(aes(x=1, y=as.numeric(contbr_zip)), 
+        data = va) +
+  geom_boxplot( )+
+  ylab('Numerical zipcode')+
+  ggtitle("zipcode Boxplot Distribution") , nrow =1)
+
+summary(va$contbr_zip)
+```
+
+>**The figure above shows the zipcode distribution of the contributors. As we can see from the charts and summary, minimum zipcode is 0 while max zipcode is 24560212.Some zipcode is not correct, since in VA, the range of zipcode should between 20100 to 24700. Besides, a lot of records use detailed zipcode, which should be uniformed into 5-digit zipcode. Therefore, I need to adjust and correct some zipcode.**
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#zip
+va$contbr_zip=substr(va$contbr_zip, 1, 5)
+va$contbr_zip[va$contbr_zip <20100|va$contbr_zip >24700]<-NA
+
+# Convert zipcode to latitude and longitude 
+data(zipcode) 
+va<-left_join(va, zipcode, by = c("contbr_zip" = "zip"))
+va$state <- NULL
+va$city <- NULL
+```
+
+```{r echo=FALSE,echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+
+ggplot(aes(x='',y=as.numeric(contbr_zip)), 
+        data =  subset(va, !is.na(contbr_zip))) +
+  geom_violin()+
+  ggtitle("Numerical zipcode Distribution") +
+  ylab('Numerical zipcode')+
+  xlab('count')
+summary(as.numeric(va$contbr_zip))
+```
+
+
+
+>**Now as we can see from the chart and summary, the minimum zipcode is 22101 while the maximum zipcode is 24657. The adjusted zipcode is perfectly within the range of 20100 and 24700.**
+
+
+
+```{r echo=FALSE, fig.width=10}
+qplot(x=party,data=va,color=I('black'),fill=party)+
+  ggtitle("Contribution Count by Party") 
+table(va$party)
+```
+
+>**The figure above shows how  contribution count varies among different parties. As we can see, Democratic Party received most contributions of  154021, which is around third the number of Republican Party of 55059. Third party or independent candidates get the fewest contributions of only 982.**
+
+```{r echo=FALSE, fig.width=10}
+qplot(x=date,data=va,color=I('black'), fill=I('violetred1'),bins = 50)+
+  ggtitle("Contribution Count by Date") 
+table(weekdays(va$date))
+```
+
+>**The figure above shows how  contribution count increases with time. We can see that the closer to the final election day, the higher the count per day. The interesting thing is that on some specific date, the contribution count increase extremely high. I should explore this later. We can also see from the summary that on weekdays, people are more likely to contribute. At weekends, there's around 30% less contributions.**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+options(scipen=100000)
+qplot(x=election_tp,data=va,color=I('black'), fill=I('aquamarine'))+
+  xlab('Election Type')+
+  ggtitle("Contribution Count by Election Type") 
+table(va$election_tp)
+
+```
+
+
+>**Primary election is used by each party to nominate candidates to run in the general election, and general election is the main election.The figure above shows count for different election types. The interesting thing is, as we can see, most contributions go to primary election, and the total number is 126865. contribution to general election is 82728, which is actually lower than it of primary election.**
+
+
+
+
+
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE, fig.width=10}
+#candidates
+qplot(cand_nm, data=va) +
+  geom_bar() +
+  ggtitle("Contribution Count Based on Candidates") +
+  xlab('Candidates Name')+
+  coord_flip()
+table(va$cand_nm)
+
+```
+
+
+>**I'm also curious that which candidates received most contributions. As we can see, Clinton get the most contributions which is much more than anyone else. Sanders, Trump and Cruz also get relatively more contributions.**
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+>**There were originally 18 variables and 212849 observations in my dataset, but in order to explore the dataset better, I'm going to add more variables.** 
+
+* COMMITTEE ID  String   
+A 9-character alpha-numeric code assigned to a committee by the Federal Election Commission. 
+
+* CANDIDATE ID  String   
+A 9-character alpha-numeric code assigned to a candidate by the Federal Election Commission. 
+
+* CANDIDATE NAME String  
+Name of candidate.
+
+* CONTRIBUTOR NAME String   
+Reported name of the contributor.
+
+
+* CONTRIBUTOR CITY String   
+Reported city of the contributor.
+
+* CONTRIBUTOR STATE String   
+Reported state of the contributor.
+
+* CONTRIBUTOR ZIP CODE String   
+Reported zip code of the contributor.
+
+* CONTRIBUTOR EMPLOYER String   
+Reported employer of the contributor.
+
+
+* CONTRIBUTOR OCCUPATION String   
+Reported occupation of the contributor.
+
+* CONTRIBUTION RECEIPT AMOUNT Numeric   
+Reported contribution amount.
+
+
+* CONTRIBUTION RECEIPT DATE Date   	
+Reported contribution receipt date.  The date format is DD-MMM-YYYY.
+
+* RECEIPT DESCRIPTION String   
+Additional information reported by the committee about a specific contribution. 
+
+
+* MEMO CODE String   
+'X' indicates the reporting committee has provided additional text to describe a specific contribution.  See the MEMO TEXT.  
+
+
+* MEMO TEXT String   
+Additional information reported by the committee about a specific contribution.  
+
+
+* FORM TYPE Sting   
+Indicates what schedule and line number the reporting committee reported a specific transaction.   
+
+
+* FILE NUMBER Numeric   
+A unique number assigned to a report and all its associated transactions.   
+Use the file number to link transactions to the report summaries (Form 3P) in REPORT_SUMMARIES_FORM_3P.ZIP on the FEC's FTP server.  
+
+
+* TRANSACTION ID String   
+A unique identifier permanently associated with each itemization or transaction appearing in an FEC electronic file.
+
+
+* ELECTION TYPE / PRIMARY-GENERAL INDICATOR String    
+This code indicates the election for which the contribution was made. EYYYY (election plus election year)
+
+
+### What is/are the main feature(s) of interest in your dataset?
+
+>**They should be the candidate name, contribution receipt amount and contributor occupation.**
+
+### What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+
+>**Date and zip code are also interesting and useful features I think will help my exploration.**
+
+### Did you create any new variables from existing variables in the dataset?
+
+>**Yes. I created contbr_fn, which is the first name of the contributers, and then predict their genders and add gender variable based on their first name. I also created party based on the candidates' names. Then I add latitude and longitude variables.**
+
+### Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+
+>**There are some errors of Zip code variable. Since in Virginia, zipcode is in the range of 20100 and 24700. So I set every zipcode beyond the range to NA. The zipcode should also be 5 digits. The extra specific part of  zipcode is removed.**
+
+
+
+
+
+
+
+# Bivariate Plots Section
+
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,Bivariate_Plots}
+
+ggplot(aes(x = gender, y = contb_receipt_amt, fill = gender),
+       data = subset(va, !is.na(gender))) + 
+  geom_boxplot() + 
+  ylim(0,500) + 
+  ylab("Contribution Amount") + 
+  xlab("Gender") +
+  ggtitle("Boxplot of Contribution Amount by Gender") 
+tapply(va$contb_receipt_amt, va$gender, summary)
+
+```
+
+
+> **As we can see from the boxplot and summary above, male contributors have higher mean and median compared with female contributors. Most of their contributions are whithin $100 for male and female contributors.**
+  
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10,fig.height=10}  
+ggplot(aes(x = party, y = contb_receipt_amt, fill = party), data = va) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 500)) +
+  xlab('party') +
+  ylab('Contribution Amount') +
+  ggtitle('Boxplot for Contribution Amount by Party') 
+tapply(va$contb_receipt_amt, va$party, summary)
+```
+
+>**As we can see from the figure and summary above, Although third party or independent candidates don't received many contributions, but their mean, median, lower quartile and upper quartile of contributions amount are all much higher than republican and democratic party. Besides, Republican Party has higher mean and median compared with democratic party.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10,fig.height=10}
+ggplot(aes(x = cand_nm, y = contb_receipt_amt),
+       data = va) + 
+  geom_boxplot() + 
+ 
+  ylab("Contribution Amount") + 
+  xlab("Candidate Name") +
+  ggtitle("Boxplot of Contribution Amount by Candidate Name") +
+  coord_flip()
+tapply(va$contb_receipt_amt, va$cand_nm, summary)
+```
+
+> **As we can see from the figure above, Gilmore actually has the highest mean.  The median of Clinton and Trump are both actually quite low. However, they have many outliers, which means some people contribute a lot of money for them.**
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=15,fig.width=10}
+
+
+
+# occupation
+
+
+df_occupation <- va %>% 
+  filter(contbr_occupation != '', 
+         contbr_occupation != 'INFORMATION REQUESTED',
+         contbr_occupation != 'INFORMATION REQUESTED PER BEST EFFORTS',
+         contbr_occupation != 'NONE') %>% 
+  group_by(contbr_occupation) %>% 
+  summarize(contb_mean = round(mean(contb_receipt_amt),2),
+            n = n()) %>%
+  arrange(desc(contb_mean)) %>% 
+  top_n(10, n)
+
+
+ggplot(aes(x = contbr_occupation, y = contb_mean,fill=contbr_occupation),
+       data = df_occupation) + 
+  geom_bar(stat = 'identity') +
+  geom_text(stat='identity', aes(label = contb_mean), 
+            data = df_occupation, vjust = -0.5) + 
+  ylab("Average Contribution") + 
+  xlab("Top 10 Occupations") + 
+  ggtitle("Average Contribution of Top 10 Occupations") 
+table(subset(va, va$contbr_occupation %in% df_occupation$contbr_occupation)$contbr_occupation)
+ 
+```
+
+> **I made another dataframe with three variables of the top ten contribution occupation, their average contribution and the number. As we can see, Lawyers, Attorney and Homemaker are the top three contributors. Therefore, candidates may should consider more about how to attract their contributions.**
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \
+the dataset?
+
+> **It seems that Hillary and Trump both have big contributions, while candidates like Bush and Christie have small contributions from more people. Besides, people in some occupations tend to provide more contributions, like Lawyers, Attorney and Homemaker.**
+
+### Did you observe any interesting relationships between the other features \
+(not the main feature(s) of interest)?
+
+> **Although third party or independent candidates received much fewer contributions, the amount of each contributions are normally much higher than Democratic Party and Republican Party.**
+
+### What was the strongest relationship you found?
+
+>**Although female seems more active than male in contribution activities, the median and high quartile  of  contribution are higher in male.**
+
+# Multivariate Plots Section
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+#date
+
+
+super_tuesday<- as.Date("1-Mar-16", format = "%d-%b-%y")
+convention_date <- as.Date("18-Jul-16", format = "%d-%b-%y")
+first_debate_date <- as.Date("26-Sep-16", format = "%d-%b-%y")
+election_date <- as.Date("08-NOV-16", format = "%d-%b-%y")
+qplot(date, data = va, geom = "histogram", fill=party,binwidth=7,
+      ylab='Number of Contributions') +
+  geom_vline(xintercept=as.numeric(super_tuesday), color="yellow") +
+  geom_vline(xintercept=as.numeric(convention_date), color="purple") +
+  geom_vline(xintercept=as.numeric(first_debate_date), color="blue") +
+  geom_vline(xintercept=as.numeric(election_date), color="black") +
+  ggtitle("Contribution Based on Party and DATE")
+
+```
+
+> **Contributions for Democratic Party before and after Super Tuesday.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$party=='Democratic Party')
+summary(va$date > super_tuesday & va$party=='Democratic Party')
+
+```
+
+> **Contributions for Republican Party before and after Super Tuesday.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$party=='Republican Party')
+summary(va$date > super_tuesday & va$party=='Republican Party')
+
+```
+
+> **Contributions for third party or independent candidates before and after Super Tuesday.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$party=='Third party or Independent Candidates')
+summary(va$date > super_tuesday & va$party=='Third party or Independent Candidates')
+
+```
+
+> **As we can see from the figure above, people become more activate in contribution around  super tuesday, convention day, first debate day and the final election day. Democratic Party get more contributions than Republican Party. And the difference become bigger and bigger. Third party or Independent Candidates get few contributions compared with other two parties. we can also see that Democratic Party and third party or independent candidates get much more contribution after Super Tuesday. The raise of Republican Party is smaller. **
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+#date
+
+
+super_tuesday<- as.Date("1-Mar-16", format = "%d-%b-%y")
+convention_date <- as.Date("18-Jul-16", format = "%d-%b-%y")
+first_debate_date <- as.Date("26-Sep-16", format = "%d-%b-%y")
+election_date <- as.Date("08-NOV-16", format = "%d-%b-%y")
+qplot(date, data = subset(va, !is.na(gender)), geom = "histogram", fill=gender,binwidth=7,
+      ylab='Number of Contributions') +
+  geom_vline(xintercept=as.numeric(super_tuesday), color="yellow") +
+  geom_vline(xintercept=as.numeric(convention_date), color="purple") +
+  geom_vline(xintercept=as.numeric(first_debate_date), color="blue") +
+  geom_vline(xintercept=as.numeric(election_date), color="black") +
+  ggtitle("Contribution Based on Gender and DATE")
+```
+
+> **Contributions from male before and after Super Tuesday.**
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday  & va$gender=="male")
+summary(va$date > super_tuesday  & va$gender=="male")
+
+```
+
+> **Contributions from female before and after Super Tuesday.**
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$gender=='female')
+summary(va$date > super_tuesday & va$gender=='female')
+
+```
+
+> **The plot above shows how male and female contribute with the change of time. We can see that both male and female contributors become more and more active when it's close to the election date and have similar trend. However, although the contribution amount of female is lower than it of male, the count of contribution of female is almost always higher than male contributors, which means female contributors are more active than male contributors. There're both huge increases before and after Super Tuesday for male and female, especially male contributors. **
+
+
+
+
+```{r echo=FALSE, fig.width=10,message=FALSE, warning=FALSE}
+df_gender_party <-va %>% 
+  group_by(gender, party) %>%
+  summarise(total = sum(contb_receipt_amt))
+
+
+
+ggplot(aes(x = gender, y = total, fill = party), 
+       data = subset(df_gender_party, !is.na(gender) )) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_text(stat = 'identity', position = position_dodge(1), 
+            aes(label = total), 
+            data = df_gender_party, vjust = -0.5) + 
+  ylab("Total Contribution Amount") + 
+  xlab("Gender") + 
+  ggtitle("Total Contribution Amount by Gender and Party")
+
+tapply(va$contb_receipt_amt, list(va$party,va$gender), sum)
+```
+
+> **This figure and statistics above show is there any contribution preference between female and male for different parties. As we can see, The total contribution of maile contributors is actually higher than female contributors in all three kinds of parties Both gender prefer Democratic Party, but female are much less like contributing to Republican Party.**
+
+
+```{r echo=FALSE,fig.width=10, message=FALSE, warning=FALSE}
+#map Republic Party
+va_map=map_data('county','virginia')
+
+qplot() + 
+  geom_polygon(data = va_map, aes(x = long, y = lat, group = group), 
+               colour = "white", fill = "springgreen2")+ 
+  geom_point(data =subset(va, party=='Republican Party'),
+             aes(x = longitude, y = latitude,color = I('firebrick1')))+ 
+   guides(color=FALSE)+
+  xlab("Longitude") + 
+  ylab("Latitude")+
+  ggtitle("Distribution of Contributions for Republican Party on Virginia Map")
+```
+
+
+> **Summary of Latitude and Longitude of contributions for Republican Party.**
+
+```{r echo=FALSE,fig.width=10, message=FALSE, warning=FALSE}
+summary(subset(va, party=='Republican Party')$latitude)
+summary(subset(va, party=='Republican Party')$longitude)
+```
+
+
+
+
+> **The plot above shows the contribution distribution for Republican Party on Virginia Map., contribution are more dense in North and East Virginia, expecially in cities like Fiarfax, Richmond and Norfolk. In South Virginia, the distribution of contributions are more loose. We're going to compare its latitude and longitude with other two parties later.**
+
+```{r echo=FALSE,fig.width=10, message=FALSE, warning=FALSE}
+#map Democratic Party
+va_map=map_data('county','virginia')
+
+qplot() + 
+  geom_polygon(data = va_map, aes(x = long, y = lat, group = group), 
+               colour = "white", fill = "springgreen2")+ 
+  geom_point(data =subset(va, party=='Democratic Party'),
+             aes(x = longitude, y = latitude,color=I('blue')))+ 
+   guides(color=FALSE)+
+  xlab("Longitude") + 
+  ylab("Latitude")+
+  ggtitle("Distribution of Contributions for Democratic Party on Virginia Map")
+```
+
+
+> **Summary of Latitude and Longitude of contributions for Democratic Party.**
+
+```{r echo=FALSE,fig.width=10, message=FALSE, warning=FALSE}
+summary(subset(va, party=='Democratic Party')$latitude)
+summary(subset(va, party=='Democratic Party')$longitude)
+```
+
+
+> **The plot above shows the contribution distribution for Democratic Party on Virginia Map. Similar to Republic Party, contribution are also more dense in big cities of North and East Virginia with more population. However, we can see that in general, the distribution of contribution points is fewer than it of Republican Party. We're going to compare its latitude and longitude with other two parties later.**
+
+```{r echo=FALSE,fig.width=10, message=FALSE, warning=FALSE}
+#map Third party or Independent Candidates
+va_map=map_data('county','virginia')
+
+qplot() + 
+  geom_polygon(data = va_map, aes(x = long, y = lat, group = group), 
+               colour = "white", fill = "springgreen2")+ 
+  geom_point(data =subset(va, party=='Third party or Independent Candidates'),
+             aes(x = longitude, y = latitude,color=I('orange')))+ 
+   guides(color=FALSE)+
+  xlab("Longitude") + 
+  ylab("Latitude")+
+  ggtitle("Distribution of Contributions for Third party or Independent Candidates on Virginia Map")
+```
+
+
+> **Summary of Latitude and Longitude of contributions for Third party or Independent Candidates.**
+
+```{r echo=FALSE,fig.width=10, message=FALSE, warning=FALSE}
+summary(subset(va, party=='Third party or Independent Candidates')$latitude)
+summary(subset(va, party=='Third party or Independent Candidates')$longitude)
+```
+
+
+> **This plot above shows the contribution distribution for third party or independent candidates on Virginia Map. Most contributions happen in cities like Arlington and Alexandria in Northeastern Virginia.Its distribution is much fewer than it of other two main parties. It only has relatively better influence in a few cities. The distribution of the Latitude and Longitude of the contributions for the three parties are quite similar. All of them are more concentrated in big cities with more population.**
+
+
+
+```{r echo=FALSE,fig.width=12, fig.height=10, message=FALSE, warning=FALSE}
+
+df_gender_name <-va %>% 
+  group_by(gender, cand_nm) %>%
+  summarise(means = mean(contb_receipt_amt))
+df_gender_name$cand_fn <- gsub(",.*$", "", df_gender_name$cand_nm)
+
+
+ggplot(aes(x = gender, y = means, fill = cand_fn), 
+       data = subset(df_gender_name, !is.na(gender) )) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_text(stat = 'identity', position = position_dodge(1), 
+            aes(label = cand_fn), 
+            data =  subset(df_gender_name, !is.na(gender) ), vjust = -0.5,size=3) + 
+  ylab("Average Contribution Amount") + 
+  xlab("Gender") + 
+  ggtitle("Average Contribution Amount of every candidate by Gender")+
+  labs(fill="Candidate's First Name") 
+ tapply(va$contb_receipt_amt, list(va$gender,va$cand_nm), sum) 
+
+```
+
+
+> **The plot and statistics above shows the difference of average contributions from female and male to different candidates. There are many interesting points in this plot. Though Clinton is a female candidate, it seems her contribution from male and female does not have huge difference. Jindal and Pataki has extremely high averages from females.**
+
+
+
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. Were there features that strengthened each other in terms of \
+looking at your feature(s) of interest?
+
+> ** I can see that during special days of the election, the contribution increase a lot. This happens around super Tuesday, convention day and first debate day. It also happens before election day. **
+
+### Were there any interesting or surprising interactions between features?
+
+> ** The contribution has interactions between locations. As we can see from the figure of Viginia map, the density of contributions and the party the contribution it goes are quite different in different location of Virginia.**
+
+
+------
+
+# Final Plots and Summary
+
+
+
+### Plot One
+```{r echo=FALSE, fig.width=10,message=FALSE, warning=FALSE,Plot_One}
+df_gender_party <-va %>% 
+  group_by(gender, party) %>%
+  summarise(total = sum(contb_receipt_amt))
+
+
+
+ggplot(aes(x = gender, y = total, fill = party), 
+       data = subset(df_gender_party, !is.na(gender) )) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  geom_text(stat = 'identity', position = position_dodge(1), 
+            aes(label = total), 
+            data = df_gender_party, vjust = -0.5) + 
+  ylab("Total Contribution Amount") + 
+  xlab("Gender") + 
+  ggtitle("Total Contribution Amount by Gender and Party")
+tapply(va$contb_receipt_amt, list(va$party,va$gender), sum)
+
+```
+
+### Description One
+> **This plot shows the whole picture about how the total contribution was contributed by differen gender and how they go to different party. As we can see, most contribution of both male and female went to Democratic Party and only a few went to third party or independent candidates. However, for females, the difference of contribution between Democratic Party and Republican Party are huge, while this difference in male is much smaller. Looks like in Virginia, females are much more interested in Democratic Party compared with male. Besides, the total contribution amount for the three party categories of male is much higher than female.**
+
+### Plot Two
+```{r echo=FALSE, fig.width=10,message=FALSE, warning=FALSE,Plot_Two}
+qplot(date, data = va, geom = "histogram", fill=party,binwidth=7,
+      ylab='Number of Contributions') +
+  geom_vline(xintercept=as.numeric(super_tuesday), color="yellow") +
+  geom_vline(xintercept=as.numeric(convention_date), color="purple") +
+  geom_vline(xintercept=as.numeric(first_debate_date), color="blue") +
+  geom_vline(xintercept=as.numeric(election_date), color="black") +
+  ggtitle("Contribution Based on Party and DATE")
+
+```
+
+> **Contributions for Democratic Party before and after Super Tuesday.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$party=='Democratic Party')
+summary(va$date > super_tuesday & va$party=='Democratic Party')
+
+```
+
+> **Contributions for Republican Party before and after Super Tuesday.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$party=='Republican Party')
+summary(va$date > super_tuesday & va$party=='Republican Party')
+
+```
+
+> **Contributions for third party or independent candidates before and after Super Tuesday.**
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10}
+summary(va$date < super_tuesday & va$party=='Third party or Independent Candidates')
+summary(va$date > super_tuesday & va$party=='Third party or Independent Candidates')
+
+```
+
+
+### Description Two
+>**As we can see from the plot above, around some special days, the contribution increase a lot. These dates are super tuesday, convention day, first debate day and election day. On super tuesday, va will hold nominating contests. Candidates need more contribution for the competition. On convention date, formal process of picking the Party's candidates for president and vice president will be hold. The raise of contribution also makes sense. After the first debate day, the contribution raise a lot to Democratic Party, which means Clinton. Contributers become much more interested in Clinton because of this debate. Then the contributions raise to the highest point before the final election day. For the whole period, we can see that Democratic Party get much more contributions compared with other parties.**
+
+### Plot Three
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=15,fig.width=10}
+
+
+
+# occupation
+
+
+df_occupation <- va %>% 
+  filter(contbr_occupation != '', 
+         contbr_occupation != 'INFORMATION REQUESTED',
+         contbr_occupation != 'INFORMATION REQUESTED PER BEST EFFORTS',
+         contbr_occupation != 'NONE') %>% 
+  group_by(contbr_occupation) %>% 
+  summarize(contb_mean = round(mean(contb_receipt_amt),2),
+            n = n()) %>%
+  arrange(desc(contb_mean)) %>% 
+  top_n(10, n)
+
+
+ggplot(aes(x = contbr_occupation, y = contb_mean,fill=contbr_occupation),
+       data = df_occupation) + 
+  geom_bar(stat = 'identity') +
+  geom_text(stat='identity', aes(label = contb_mean), 
+            data = df_occupation, vjust = -0.5) + 
+  ylab("Average Contribution") + 
+  xlab("Top 10 Occupations") + 
+  ggtitle("Average Contribution of Top 10 Occupations") 
+table(subset(va, va$contbr_occupation %in% df_occupation$contbr_occupation)$contbr_occupation)
+```
+
+### Description Three   
+
+> **This plot shows the top ten occupations of the contributors. This is a very interesting and useful plot. As we can see, lawyers and attorney are the top 2 contributors. Virginia is quite close to DC and there are a lot of lawyers and attorneys. They may be very enthusiastic about polics because of some interests and they're quite rich. Homemaker is at the third rank. This is interesting, I think homemaker may inclute a lot of people of different background since it's not defined in a narrow field. Homemakers may have relatively more time spending in considering political problems and more interested in political news than people with work. Consultant is also a broad occupation, there're lots of people in this field with high income. Consultants also tent to be more interested in economical and political environment, so they may be more likely to make a contribution. Physician is also a group with high income and high education level. It seems that people with high income and education background are more likely to make contributions. Politicians of different parties may consider more about how to attract these people**
+
+
+------
+
+# Reflection
+
+> **In doing this project, I learned a lot about how to use ggplot. It's a really great data visualization tool. It helps me view how the contribution are distributed among different locations, genders and parties, and how it changes with time. I have several struggles in some specific details, like some functions like as.Date does not work untile the locale is resetted. The adjustment of zipcood to latitude and longitude and implement it to map plot is also a chanllege. Learning through Google and live help from Udacity expert really help me a lot in learning data visualization. In the future, I should learn and practice more about data visualization in R, since it's really powerful. **
